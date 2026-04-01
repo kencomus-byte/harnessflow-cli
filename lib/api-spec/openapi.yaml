@@ -3,20 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: HarnessFlow Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: sessions
+    description: Harness session management
+  - name: traces
+    description: Session trace events
+  - name: evals
+    description: Quality evaluation reports
+  - name: analytics
+    description: Token usage and cost analytics
+  - name: config
+    description: Harness configuration
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +34,453 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all harness sessions
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+            enum: [RUNNING, COMPLETED, FAILED, INTERRUPTED, null]
+        - name: backend
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+            default: 50
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+
+  /sessions/{sessionId}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get session details
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{sessionId}/trace:
+    get:
+      operationId: getSessionTrace
+      tags: [traces]
+      summary: Get trace events for a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Trace events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TraceEvent"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{sessionId}/eval:
+    get:
+      operationId: getSessionEval
+      tags: [evals]
+      summary: Get evaluation report for a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evaluation report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalReport"
+        "404":
+          description: Eval not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Get overall analytics summary
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/tokens:
+    get:
+      operationId: getTokenUsageTimeline
+      tags: [analytics]
+      summary: Get token usage over time
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+            default: 30
+      responses:
+        "200":
+          description: Token usage timeline
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TokenUsagePoint"
+
+  /analytics/tools:
+    get:
+      operationId: getToolUsageStats
+      tags: [analytics]
+      summary: Get most-used tools across all sessions
+      responses:
+        "200":
+          description: Tool usage statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ToolStat"
+
+  /analytics/activity:
+    get:
+      operationId: getRecentActivity
+      tags: [analytics]
+      summary: Get recent activity feed across all sessions
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+            default: 20
+      responses:
+        "200":
+          description: Recent activity events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+
+  /config:
+    get:
+      operationId: getConfig
+      tags: [config]
+      summary: Get current harness configuration
+      responses:
+        "200":
+          description: Harness configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HarnessConfig"
+        "404":
+          description: No config file found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    TokenUsage:
+      type: object
+      required: [inputTokens, outputTokens, totalTokens, estimatedCostUsd]
+      properties:
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        totalTokens:
+          type: integer
+        estimatedCostUsd:
+          type: number
+
+    SessionProgress:
+      type: object
+      required: [filesChanged, testsAdded, testsPassing]
+      properties:
+        filesChanged:
+          type: array
+          items:
+            type: string
+        testsAdded:
+          type: integer
+        testsPassing:
+          type: integer
+
+    Session:
+      type: object
+      required: [sessionId, startedAt, backend, task, status]
+      properties:
+        sessionId:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+        backend:
+          type: string
+        model:
+          type: ["string", "null"]
+        task:
+          type: string
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, FAILED, INTERRUPTED]
+        durationMs:
+          type: ["integer", "null"]
+        tokenUsage:
+          $ref: "#/components/schemas/TokenUsage"
+        progress:
+          $ref: "#/components/schemas/SessionProgress"
+        guardrailBlocks:
+          type: integer
+        toolCallCount:
+          type: integer
+
+    TraceEvent:
+      type: object
+      required: [ts, type]
+      properties:
+        ts:
+          type: string
+          format: date-time
+        type:
+          type: string
+        tool:
+          type: ["string", "null"]
+        input:
+          type: ["object", "null"]
+        output:
+          type: ["string", "null"]
+        blocked:
+          type: ["boolean", "null"]
+        reason:
+          type: ["string", "null"]
+        tokens:
+          type: ["integer", "null"]
+        durationMs:
+          type: ["integer", "null"]
+        hookEvent:
+          type: ["string", "null"]
+        hookName:
+          type: ["string", "null"]
+        exitCode:
+          type: ["integer", "null"]
+        message:
+          type: ["string", "null"]
+
+    EvalReport:
+      type: object
+      required: [sessionId, status, tokenUsage, toolCallCount, filesChanged, guardrailBlocks, durationMs, qualityGates]
+      properties:
+        sessionId:
+          type: string
+        status:
+          type: string
+        tokenUsage:
+          $ref: "#/components/schemas/TokenUsage"
+        toolCallCount:
+          type: integer
+        filesChanged:
+          type: array
+          items:
+            type: string
+        guardrailBlocks:
+          type: integer
+        durationMs:
+          type: integer
+        qualityGates:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityGateResult"
+        notes:
+          type: ["string", "null"]
+
+    QualityGateResult:
+      type: object
+      required: [name, passed, exitCode]
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        exitCode:
+          type: integer
+        output:
+          type: ["string", "null"]
+        durationMs:
+          type: ["integer", "null"]
+
+    AnalyticsSummary:
+      type: object
+      required: [totalSessions, completedSessions, failedSessions, runningSessions, totalTokens, totalCostUsd, avgDurationMs, successRate, totalToolCalls, totalGuardrailBlocks]
+      properties:
+        totalSessions:
+          type: integer
+        completedSessions:
+          type: integer
+        failedSessions:
+          type: integer
+        runningSessions:
+          type: integer
+        totalTokens:
+          type: integer
+        totalCostUsd:
+          type: number
+        avgDurationMs:
+          type: number
+        successRate:
+          type: number
+        totalToolCalls:
+          type: integer
+        totalGuardrailBlocks:
+          type: integer
+        topBackend:
+          type: ["string", "null"]
+
+    TokenUsagePoint:
+      type: object
+      required: [date, inputTokens, outputTokens, totalTokens, costUsd, sessionCount]
+      properties:
+        date:
+          type: string
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        totalTokens:
+          type: integer
+        costUsd:
+          type: number
+        sessionCount:
+          type: integer
+
+    ToolStat:
+      type: object
+      required: [tool, callCount, successCount, failCount, avgDurationMs]
+      properties:
+        tool:
+          type: string
+        callCount:
+          type: integer
+        successCount:
+          type: integer
+        failCount:
+          type: integer
+        avgDurationMs:
+          type: number
+
+    ActivityEvent:
+      type: object
+      required: [ts, sessionId, type, description]
+      properties:
+        ts:
+          type: string
+          format: date-time
+        sessionId:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        backend:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+
+    HarnessConfig:
+      type: object
+      required: [backend]
+      properties:
+        backend:
+          type: string
+        model:
+          type: ["string", "null"]
+        guardrails:
+          type: ["object", "null"]
+        hooks:
+          type: ["object", "null"]
+        quality_gates:
+          type: ["object", "null"]
+        token_budget:
+          type: ["object", "null"]
+        spawn:
+          type: ["object", "null"]

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/harness-dashboard/"
+title = "HarnessFlow Dashboard"
+version = "1.0.0"
+id = "artifacts/harness-dashboard"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/harness-dashboard/" ]
+localPort = 18360
+
+[services.development]
+run = "pnpm --filter @workspace/harness-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/harness-dashboard", "run", "build" ]
+publicDir = "artifacts/harness-dashboard/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18360"
+BASE_PATH = "/harness-dashboard/"
