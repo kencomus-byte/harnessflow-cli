@@ -41,9 +41,10 @@ export const HarnessConfigSchema = z.object({
       pre_tool: z
         .array(
           z.object({
-            name: z.string(),
+            name: z.string().optional(),
             script: z.string(),
             on_tools: z.array(z.string()).optional(),
+            blocking: z.boolean().default(true),
             timeout: z.number().default(30),
           })
         )
@@ -51,7 +52,7 @@ export const HarnessConfigSchema = z.object({
       post_tool: z
         .array(
           z.object({
-            name: z.string(),
+            name: z.string().optional(),
             script: z.string(),
             on_tools: z.array(z.string()).optional(),
             blocking: z.boolean().default(false),
@@ -62,9 +63,10 @@ export const HarnessConfigSchema = z.object({
       on_session_end: z
         .array(
           z.object({
-            name: z.string(),
+            name: z.string().optional(),
             script: z.string(),
             blocking: z.boolean().default(false),
+            timeout: z.number().default(60),
           })
         )
         .default([]),
@@ -159,7 +161,7 @@ export interface ContextBundle {
 }
 
 export interface HookConfig {
-  name: string;
+  name?: string;
   script: string;
   on_tools?: string[];
   blocking?: boolean;

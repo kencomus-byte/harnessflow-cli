@@ -88,10 +88,9 @@ export class SessionRunner {
     console.log(chalk.gray(`\n🚀 Starting agent...\n`));
 
     try {
-      await this.hookRunner.runHooks(this.config.hooks.pre_tool);
-
+      const lastToolRef: { name: string | undefined } = { name: undefined };
       for await (const event of adapter.run(agentRequest)) {
-        await this.handleEvent(event, session, tracer, verbose);
+        await this.handleEvent(event, session, tracer, verbose, lastToolRef);
         if (event.type === "done") {
           session.tokenUsage = {
             inputTokens: event.usage.inputTokens,
@@ -133,8 +132,9 @@ export class SessionRunner {
     console.log(chalk.cyan(`\n🔄 Resuming session: ${sessionId}\n`));
 
     try {
+      const lastToolRef: { name: string | undefined } = { name: undefined };
       for await (const event of adapter.resume(sessionId, task)) {
-        await this.handleEvent(event, session, tracer, verbose);
+        await this.handleEvent(event, session, tracer, verbose, lastToolRef);
         if (event.type === "done") {
           session.tokenUsage = {
             inputTokens: event.usage.inputTokens,
@@ -180,7 +180,8 @@ export class SessionRunner {
     event: AgentEvent,
     session: SessionState,
     tracer: Tracer,
-    verbose: boolean
+    verbose: boolean,
+    lastToolRef: { name: string | undefined }
   ): Promise<void> {
     switch (event.type) {
       case "thinking":
@@ -217,6 +218,7 @@ export class SessionRunner {
         const argsStr = JSON.stringify(event.args).slice(0, 120);
         console.log(chalk.blue(`🔧 ${event.tool}`) + chalk.gray(` ${argsStr}`));
 
+        lastToolRef.name = event.tool;
         await this.hookRunner.runHooks(this.config.hooks.pre_tool, event.tool);
         tracer.logToolCall(event.tool, event.args, true, 0);
 
@@ -236,7 +238,8 @@ export class SessionRunner {
         if (verbose) {
           console.log(chalk.gray(`   → ${event.result.slice(0, 200)}`));
         }
-        await this.hookRunner.runHooks(this.config.hooks.post_tool);
+        await this.hookRunner.runHooks(this.config.hooks.post_tool, lastToolRef.name);
+        lastToolRef.name = undefined;
         break;
 
       case "message":

@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, basename } from "path";
 import { HookConfig, HookResult } from "../types.js";
 
 const execFileAsync = promisify(execFile);
@@ -9,6 +9,11 @@ const execFileAsync = promisify(execFile);
 export class HookRunner {
   constructor(private projectRoot: string) {}
 
+  /**
+   * Run hooks filtered by triggeredByTool.
+   * - If triggeredByTool is provided, only hooks whose `on_tools` list includes it are run.
+   * - Hooks with no `on_tools` list always run (they apply to all tools).
+   */
   async runHooks(
     hooks: HookConfig[],
     triggeredByTool?: string
@@ -16,7 +21,11 @@ export class HookRunner {
     const results: HookResult[] = [];
 
     for (const hook of hooks) {
-      if (triggeredByTool && hook.on_tools && !hook.on_tools.includes(triggeredByTool)) {
+      if (
+        triggeredByTool !== undefined &&
+        hook.on_tools !== undefined &&
+        !hook.on_tools.includes(triggeredByTool)
+      ) {
         continue;
       }
 
@@ -24,7 +33,7 @@ export class HookRunner {
       results.push(result);
 
       if (hook.blocking && !result.passed) {
-        throw new HookFailedError(hook.name, result.stderr || result.stdout);
+        throw new HookFailedError(result.name, result.stderr || result.stdout);
       }
     }
 
@@ -33,11 +42,12 @@ export class HookRunner {
 
   private async runSingleHook(hook: HookConfig): Promise<HookResult> {
     const scriptPath = resolve(this.projectRoot, hook.script);
+    const hookName = hook.name ?? basename(hook.script, ".sh");
     const startMs = Date.now();
 
     if (!existsSync(scriptPath)) {
       return {
-        name: hook.name,
+        name: hookName,
         exitCode: 0,
         stdout: `[Hook skipped: ${hook.script} not found]`,
         stderr: "",
@@ -53,7 +63,7 @@ export class HookRunner {
       });
 
       return {
-        name: hook.name,
+        name: hookName,
         exitCode: 0,
         stdout,
         stderr,
@@ -63,7 +73,7 @@ export class HookRunner {
     } catch (err: unknown) {
       const e = err as { code?: number; stdout?: string; stderr?: string };
       return {
-        name: hook.name,
+        name: hookName,
         exitCode: e.code ?? 1,
         stdout: e.stdout ?? "",
         stderr: e.stderr ?? String(err),
