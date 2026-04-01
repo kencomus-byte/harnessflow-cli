@@ -70,6 +70,8 @@ export class SessionRunner {
         console.error(chalk.red("🚫 Potential prompt injection detected in task."));
         tracer.logGuardrailBlock("prompt_injection", "deny");
         session.status = "FAILED";
+        session.endedAt = formatTimestamp();
+        await this.finalizeSession(session, tracer);
         return session;
       }
     }
@@ -88,11 +90,8 @@ export class SessionRunner {
     try {
       await this.hookRunner.runHooks(this.config.hooks.pre_tool);
 
-      let lastMessage = "";
-
       for await (const event of adapter.run(agentRequest)) {
         await this.handleEvent(event, session, tracer, verbose);
-        if (event.type === "message") lastMessage = event.content;
         if (event.type === "done") {
           session.tokenUsage = {
             inputTokens: event.usage.inputTokens,
@@ -116,32 +115,21 @@ export class SessionRunner {
       session.status = "FAILED";
       session.endedAt = formatTimestamp();
     } finally {
-      await this.contextManager.saveSession(session);
-
-      if (this.config.session.auto_handoff && session.status !== "FAILED") {
-        await this.contextManager.createHandoffArtifact(session);
-      }
-
-      tracer.logSessionEnd(
-        session.status,
-        session.tokenUsage.totalTokens,
-        session.progress.filesChanged.length
-      );
-
-      this.printSummary(session, tracer.getTraceFile());
+      await this.finalizeSession(session, tracer);
     }
 
     return session;
   }
 
   async resume(sessionId: string, adapter: AgentAdapter, verbose = false): Promise<SessionState> {
-    const existingSessionRaw = await this.contextManager.loadContext();
     const task = `Resume session ${sessionId}`;
 
     const session = this.contextManager.createInitialSession(task, adapter.name);
     session.sessionId = sessionId;
 
     const tracer = new Tracer(this.projectRoot, this.config, sessionId);
+    tracer.logSessionStart(task, adapter.name);
+
     console.log(chalk.cyan(`\n🔄 Resuming session: ${sessionId}\n`));
 
     try {
@@ -154,16 +142,38 @@ export class SessionRunner {
             totalTokens: event.usage.totalTokens,
             estimatedCost: formatCostValue(event.usage.totalTokens),
           };
+          tracer.logTokenUsage(event.usage);
+          tracer.logToTokenFile(session.sessionId, event.usage);
         }
       }
       session.status = "COMPLETED";
+      session.endedAt = formatTimestamp();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`\n❌ Resume error: ${msg}`));
       session.status = "FAILED";
+      session.endedAt = formatTimestamp();
+    } finally {
+      await this.finalizeSession(session, tracer);
     }
 
     return session;
+  }
+
+  private async finalizeSession(session: SessionState, tracer: Tracer): Promise<void> {
+    await this.contextManager.saveSession(session);
+
+    if (this.config.session.auto_handoff && session.status !== "FAILED") {
+      await this.contextManager.createHandoffArtifact(session);
+    }
+
+    tracer.logSessionEnd(
+      session.status,
+      session.tokenUsage.totalTokens,
+      session.progress.filesChanged.length
+    );
+
+    this.printSummary(session, tracer.getTraceFile());
   }
 
   private async handleEvent(
@@ -180,8 +190,8 @@ export class SessionRunner {
         break;
 
       case "tool_call": {
-        const allowed = this.guardrailLayer.checkToolAllowed(event.tool);
-        if (!allowed) {
+        const toolAllowed = this.guardrailLayer.checkToolAllowed(event.tool);
+        if (!toolAllowed) {
           console.warn(chalk.yellow(`⚠️  Tool "${event.tool}" not in allowedTools list`));
           tracer.logGuardrailBlock(`tool:${event.tool}`, "warn");
           break;
@@ -196,8 +206,8 @@ export class SessionRunner {
           }
           if (decision.action === "confirm" && this.config.guardrails.confirm_destructive) {
             tracer.logGuardrailBlock(decision.reason, "confirm");
-            const allowed = await this.guardrailLayer.promptUserConfirmation(decision.reason);
-            if (!allowed) {
+            const userAllowed = await this.guardrailLayer.promptUserConfirmation(decision.reason);
+            if (!userAllowed) {
               console.log(chalk.yellow("   Command denied by user."));
               break;
             }
@@ -211,8 +221,10 @@ export class SessionRunner {
         tracer.logToolCall(event.tool, event.args, true, 0);
 
         if (event.tool === "Write" || event.tool === "Edit") {
-          const file = (event.args.file_path as string | undefined) ||
-                        (event.args.path as string | undefined) || "";
+          const file =
+            (event.args.file_path as string | undefined) ||
+            (event.args.path as string | undefined) ||
+            "";
           if (file && !session.progress.filesChanged.includes(file)) {
             session.progress.filesChanged.push(file);
           }
@@ -252,11 +264,7 @@ export class SessionRunner {
         `   Tokens:        in=${formatTokenCount(inputTokens)} out=${formatTokenCount(outputTokens)} total=${formatTokenCount(totalTokens)}`
       )
     );
-    console.log(
-      chalk.gray(
-        `   Cost estimate:  ${formatCost(totalTokens)}`
-      )
-    );
+    console.log(chalk.gray(`   Cost estimate:  ${formatCost(totalTokens)}`));
     console.log(chalk.gray(`   Trace:         ${traceFile}`));
   }
 }

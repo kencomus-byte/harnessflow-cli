@@ -87,7 +87,8 @@ export class ContextManager {
       try {
         const session = JSON.parse(sessionRaw) as SessionState;
         sessionSummary = this.formatSessionSummary(session);
-      } catch {
+      } catch (err) {
+        process.stderr.write(`[harness] Failed to parse session.json: ${String(err)}\n`);
         sessionSummary = "Previous session state could not be parsed.";
       }
     }

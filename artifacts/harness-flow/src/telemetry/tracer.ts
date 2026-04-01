@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync } from "fs";
 import { resolve } from "path";
-import { TraceEvent, HarnessConfig, TokenUsage } from "../types.js";
+import { HarnessConfig, TokenUsage } from "../types.js";
 import { ensureDir, formatTimestamp } from "../utils.js";
 
 export class Tracer {
@@ -16,15 +16,12 @@ export class Tracer {
     this.traceFile = resolve(traceDir, `${sessionId}.jsonl`);
   }
 
-  log(event: Omit<TraceEvent, "ts">): void {
-    const entry: Record<string, unknown> = {
-      ts: formatTimestamp(),
-      ...event,
-    };
-
+  log(event: Record<string, unknown> & { type: string }): void {
+    const entry = JSON.stringify({ ts: formatTimestamp(), ...event });
     try {
-      appendFileSync(this.traceFile, JSON.stringify(entry) + "\n", "utf8");
-    } catch {
+      appendFileSync(this.traceFile, entry + "\n", "utf8");
+    } catch (err) {
+      process.stderr.write(`[tracer] Failed to write trace: ${String(err)}\n`);
     }
   }
 
@@ -41,11 +38,11 @@ export class Tracer {
   }
 
   logHookRun(hook: string, trigger: string, exitCode: number, durationMs: number, error?: string): void {
-    this.log({ type: "hook_run", hook, trigger, exitCode, durationMs, ...(error ? { error } : {}) });
+    this.log({ type: "hook_run", hook, trigger, exitCode, durationMs, ...(error !== undefined ? { error } : {}) });
   }
 
   logGuardrailBlock(pattern: string, action: string, userChoice?: string): void {
-    this.log({ type: "guardrail_block", pattern, action, ...(userChoice ? { userChoice } : {}) });
+    this.log({ type: "guardrail_block", pattern, action, ...(userChoice !== undefined ? { userChoice } : {}) });
   }
 
   logTokenUsage(usage: TokenUsage): void {
@@ -64,15 +61,11 @@ export class Tracer {
 
     ensureDir(resolve(this.projectRoot, ".harness"));
 
-    const entry = {
-      ts: formatTimestamp(),
-      sessionId,
-      ...usage,
-    };
-
+    const entry = JSON.stringify({ ts: formatTimestamp(), sessionId, ...usage });
     try {
-      appendFileSync(tokenLogFile, JSON.stringify(entry) + "\n", "utf8");
-    } catch {
+      appendFileSync(tokenLogFile, entry + "\n", "utf8");
+    } catch (err) {
+      process.stderr.write(`[tracer] Failed to write token log: ${String(err)}\n`);
     }
   }
 

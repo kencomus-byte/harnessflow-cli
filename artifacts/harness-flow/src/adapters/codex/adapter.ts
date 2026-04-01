@@ -15,11 +15,7 @@ export class CodexCliAdapter implements AgentAdapter {
   }
 
   async *run(request: AgentRequest): AsyncGenerator<AgentEvent> {
-    const args = [
-      "--quiet",
-      "--approval-mode",
-      "suggest",
-    ];
+    const args = ["--quiet", "--approval-mode", "suggest"];
 
     if (request.model) {
       args.push("--model", request.model);
@@ -36,13 +32,27 @@ export class CodexCliAdapter implements AgentAdapter {
     proc.stdin.end();
 
     let outputText = "";
+    let stderrText = "";
+
     for await (const chunk of proc.stdout) {
-      const text = chunk.toString();
+      const text = (chunk as Buffer).toString();
       outputText += text;
       yield { type: "message", content: text };
     }
 
-    await new Promise<void>((resolve) => proc.on("close", resolve));
+    for await (const chunk of proc.stderr) {
+      stderrText += (chunk as Buffer).toString();
+    }
+
+    const exitCode = await new Promise<number>((resolve) => {
+      proc.on("close", (code) => resolve(code ?? 1));
+    });
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `codex exited with code ${exitCode}: ${stderrText.slice(0, 500)}`
+      );
+    }
 
     const inputTokens = estimateTokens(fullPrompt);
     const outputTokens = estimateTokens(outputText);

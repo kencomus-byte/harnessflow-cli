@@ -5,6 +5,7 @@ import { initCommand } from "./commands/init.js";
 import { runCommand } from "./commands/run.js";
 import { resumeCommand } from "./commands/resume.js";
 import { statusCommand } from "./commands/status.js";
+import { evalCommand } from "./commands/eval.js";
 
 const VERSION = "0.1.0";
 
@@ -75,6 +76,21 @@ async function main(): Promise<void> {
       async (options: { traces?: boolean; tokens?: boolean; json?: boolean }) => {
         const projectRoot = findProjectRoot();
         await statusCommand(projectRoot, options);
+      }
+    );
+
+  program
+    .command("eval [sessionId]")
+    .description("Analyze a session trace and produce an eval report")
+    .option("--all", "Evaluate all trace files")
+    .option("--json", "Output eval report as JSON")
+    .action(
+      async (
+        sessionId: string | undefined,
+        options: { all?: boolean; json?: boolean }
+      ) => {
+        const projectRoot = findProjectRoot();
+        await evalCommand(projectRoot, { sessionId, ...options });
       }
     );
 

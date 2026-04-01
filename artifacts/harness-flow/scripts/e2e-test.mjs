@@ -224,9 +224,47 @@ async function runTests() {
   }
 
   // ============================================================
-  // TEST 7: Error on unknown command
+  // TEST 7: harness eval
   // ============================================================
-  console.log("\n📋 Test 7: Unknown command error");
+  console.log("\n📋 Test 7: harness eval");
+  {
+    const dir = makeTmpProject();
+    try {
+      run(["init", "--backend", "dry-run"], dir);
+      run(["run", "Build a REST API endpoint", "--dry-run"], dir);
+
+      const { exitCode, stdout } = run(["eval"], dir);
+      assert(exitCode === 0, "exits with code 0");
+      assert(stdout.includes("Eval Report"), "shows eval report");
+      assert(stdout.includes("COMPLETED"), "shows COMPLETED status");
+      assert(stdout.includes("Tool Calls"), "shows tool calls");
+      assert(stdout.includes("Tokens"), "shows token info");
+
+      const evalDirPath = join(dir, ".harness", "evals");
+      assert(existsSync(evalDirPath), "evals directory created");
+
+      const { readdirSync } = await import("fs");
+      const evalFiles = readdirSync(evalDirPath).filter((f) => f.endsWith(".eval.json"));
+      assert(evalFiles.length > 0, "eval JSON file created");
+
+      const evalContent = JSON.parse(readFileSync(join(evalDirPath, evalFiles[0]), "utf8"));
+      assert(evalContent.sessionId !== undefined, "eval report has sessionId");
+      assert(evalContent.sessionStatus === "COMPLETED", "eval report shows COMPLETED");
+      assert(evalContent.tokenUsage !== undefined, "eval report has tokenUsage");
+
+      const { exitCode: e2, stdout: s2 } = run(["eval", "--json"], dir);
+      assert(e2 === 0, "eval --json exits 0");
+      const jsonReport = JSON.parse(s2);
+      assert(jsonReport.sessionId !== undefined, "JSON report has sessionId");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }
+
+  // ============================================================
+  // TEST 8: Error on unknown command
+  // ============================================================
+  console.log("\n📋 Test 8: Unknown command error");
   {
     const dir = makeTmpProject();
     try {

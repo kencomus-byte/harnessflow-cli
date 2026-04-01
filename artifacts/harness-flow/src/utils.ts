@@ -8,13 +8,15 @@ export function ensureDir(dir: string): void {
 }
 
 export function readFileOrDefault(filePath: string, defaultContent = ""): string {
-  try {
-    if (existsSync(filePath)) {
-      return readFileSync(filePath, "utf8");
-    }
-  } catch {
+  if (!existsSync(filePath)) {
+    return defaultContent;
   }
-  return defaultContent;
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch (err) {
+    process.stderr.write(`[harness] Failed to read ${filePath}: ${String(err)}\n`);
+    return defaultContent;
+  }
 }
 
 export function writeFileSafe(filePath: string, content: string): void {
