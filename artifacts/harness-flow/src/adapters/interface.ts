@@ -19,3 +19,14 @@ export function combinePrompt(systemPrompt: string, task: string): string {
 export function makeEmptyUsage(): TokenUsage {
   return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 }
+
+/**
+ * Thrown by guardrail checks in handleEvent to abort the session immediately.
+ * Propagates out of the event loop, interrupting the agent process stream.
+ */
+export class GuardrailAbortError extends Error {
+  constructor(public reason: string) {
+    super(`Guardrail abort: ${reason}`);
+    this.name = "GuardrailAbortError";
+  }
+}

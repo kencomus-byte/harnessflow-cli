@@ -46,6 +46,16 @@ export class HookRunner {
     const startMs = Date.now();
 
     if (!existsSync(scriptPath)) {
+      if (hook.blocking) {
+        return {
+          name: hookName,
+          exitCode: 1,
+          stdout: "",
+          stderr: `Blocking hook "${hookName}" script not found: ${hook.script}`,
+          durationMs: 0,
+          passed: false,
+        };
+      }
       return {
         name: hookName,
         exitCode: 0,

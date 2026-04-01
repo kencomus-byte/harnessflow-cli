@@ -146,7 +146,25 @@ describe("HookRunner", () => {
     }
   });
 
-  it("skips missing script files gracefully", async () => {
+  it("skips missing script files gracefully when non-blocking", async () => {
+    const dir = makeTmpDir();
+    try {
+      const runner = new HookRunner(dir);
+      const hook: HookConfig = {
+        script: "does-not-exist.sh",
+        blocking: false,
+      };
+
+      const results = await runner.runHooks([hook]);
+      expect(results).toHaveLength(1);
+      expect(results[0].passed).toBe(true);
+      expect(results[0].stdout).toContain("skipped");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("throws HookFailedError when blocking hook script is missing", async () => {
     const dir = makeTmpDir();
     try {
       const runner = new HookRunner(dir);
@@ -155,10 +173,7 @@ describe("HookRunner", () => {
         blocking: true,
       };
 
-      const results = await runner.runHooks([hook]);
-      expect(results).toHaveLength(1);
-      expect(results[0].passed).toBe(true);
-      expect(results[0].stdout).toContain("skipped");
+      await expect(runner.runHooks([hook])).rejects.toThrow(/Blocking hook.*script not found/);
     } finally {
       rmSync(dir, { recursive: true });
     }

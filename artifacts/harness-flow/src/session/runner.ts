@@ -5,7 +5,7 @@ import { PromptEngine } from "../prompt/engine.js";
 import { GuardrailLayer } from "../guardrail/layer.js";
 import { HookRunner } from "../hooks/runner.js";
 import { Tracer } from "../telemetry/tracer.js";
-import { AgentAdapter } from "../adapters/interface.js";
+import { AgentAdapter, GuardrailAbortError } from "../adapters/interface.js";
 import { formatTokenCount, formatCost, formatTimestamp } from "../utils.js";
 import { basename } from "path";
 
@@ -109,9 +109,14 @@ export class SessionRunner {
       await this.hookRunner.runHooks(this.config.hooks.on_session_end);
 
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(chalk.red(`\n❌ Agent error: ${msg}`));
-      session.status = "FAILED";
+      if (err instanceof GuardrailAbortError) {
+        console.error(chalk.red(`\n🚫 Session aborted by guardrail: ${err.reason}`));
+        session.status = "INTERRUPTED";
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(chalk.red(`\n❌ Agent error: ${msg}`));
+        session.status = "FAILED";
+      }
       session.endedAt = formatTimestamp();
     } finally {
       await this.finalizeSession(session, tracer);
@@ -149,9 +154,14 @@ export class SessionRunner {
       session.status = "COMPLETED";
       session.endedAt = formatTimestamp();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(chalk.red(`\n❌ Resume error: ${msg}`));
-      session.status = "FAILED";
+      if (err instanceof GuardrailAbortError) {
+        console.error(chalk.red(`\n🚫 Resume aborted by guardrail: ${err.reason}`));
+        session.status = "INTERRUPTED";
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(chalk.red(`\n❌ Resume error: ${msg}`));
+        session.status = "FAILED";
+      }
       session.endedAt = formatTimestamp();
     } finally {
       await this.finalizeSession(session, tracer);
@@ -193,24 +203,27 @@ export class SessionRunner {
       case "tool_call": {
         const toolAllowed = this.guardrailLayer.checkToolAllowed(event.tool);
         if (!toolAllowed) {
-          console.warn(chalk.yellow(`⚠️  Tool "${event.tool}" not in allowedTools list`));
-          tracer.logGuardrailBlock(`tool:${event.tool}`, "warn");
-          break;
+          tracer.logGuardrailBlock(`tool:${event.tool}`, "deny");
+          throw new GuardrailAbortError(
+            `Tool "${event.tool}" is not in the allowedTools list. Aborting session to prevent unauthorized tool use.`
+          );
         }
 
         if (event.tool === "Bash" && typeof event.args.command === "string") {
           const decision = this.guardrailLayer.checkCommand(event.args.command);
           if (decision.action === "deny") {
-            console.error(chalk.red(`🚫 Blocked: ${decision.reason}`));
             tracer.logGuardrailBlock(decision.reason, "deny");
-            break;
+            throw new GuardrailAbortError(
+              `Destructive command blocked in strict mode: "${decision.reason}". Aborting session.`
+            );
           }
           if (decision.action === "confirm" && this.config.guardrails.confirm_destructive) {
             tracer.logGuardrailBlock(decision.reason, "confirm");
             const userAllowed = await this.guardrailLayer.promptUserConfirmation(decision.reason);
             if (!userAllowed) {
-              console.log(chalk.yellow("   Command denied by user."));
-              break;
+              throw new GuardrailAbortError(
+                `User denied destructive command: "${decision.reason}". Aborting session.`
+              );
             }
           }
         }

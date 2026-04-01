@@ -6,6 +6,7 @@ import { runCommand } from "./commands/run.js";
 import { resumeCommand } from "./commands/resume.js";
 import { statusCommand } from "./commands/status.js";
 import { evalCommand } from "./commands/eval.js";
+import { replayCommand } from "./commands/replay.js";
 
 const VERSION = "0.1.0";
 
@@ -76,6 +77,22 @@ async function main(): Promise<void> {
       async (options: { traces?: boolean; tokens?: boolean; json?: boolean }) => {
         const projectRoot = findProjectRoot();
         await statusCommand(projectRoot, options);
+      }
+    );
+
+  program
+    .command("replay [sessionId]")
+    .description("Replay a session trace for debugging and audit")
+    .option("--speed <n>", "Playback speed multiplier (default: 1.0)", parseFloat)
+    .option("--filter <type>", "Only show events of this type (e.g. tool_call, guardrail_block)")
+    .option("--json", "Output all events as JSON")
+    .action(
+      async (
+        sessionId: string | undefined,
+        options: { speed?: number; filter?: string; json?: boolean }
+      ) => {
+        const projectRoot = findProjectRoot();
+        await replayCommand(sessionId, projectRoot, options);
       }
     );
 
