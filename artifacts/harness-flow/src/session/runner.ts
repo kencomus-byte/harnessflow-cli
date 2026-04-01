@@ -6,6 +6,7 @@ import { GuardrailLayer } from "../guardrail/layer.js";
 import { HookRunner } from "../hooks/runner.js";
 import { Tracer } from "../telemetry/tracer.js";
 import { AgentAdapter, GuardrailAbortError } from "../adapters/interface.js";
+import { USER_QUIT_SENTINEL } from "../guardrail/layer.js";
 import { formatTokenCount, formatCost, formatTimestamp } from "../utils.js";
 import { basename } from "path";
 
@@ -219,8 +220,13 @@ export class SessionRunner {
           }
           if (decision.action === "confirm" && this.config.guardrails.confirm_destructive) {
             tracer.logGuardrailBlock(decision.reason, "confirm");
-            const userAllowed = await this.guardrailLayer.promptUserConfirmation(decision.reason);
-            if (!userAllowed) {
+            const answer = await this.guardrailLayer.promptUserConfirmation(decision.reason);
+            if (answer === USER_QUIT_SENTINEL) {
+              throw new GuardrailAbortError(
+                `User requested quit during destructive command confirmation. Aborting session.`
+              );
+            }
+            if (!answer) {
               throw new GuardrailAbortError(
                 `User denied destructive command: "${decision.reason}". Aborting session.`
               );

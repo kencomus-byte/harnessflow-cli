@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "fs";
 import { resolve } from "path";
 import { loadConfig } from "../config.js";
 import { ensureDir, formatTimestamp } from "../utils.js";
@@ -57,7 +57,13 @@ export async function evalCommand(
     process.exit(1);
   }
 
-  const traceFiles = readdirSync(traceDir).filter((f) => f.endsWith(".jsonl"));
+  const traceFiles = readdirSync(traceDir)
+    .filter((f) => f.endsWith(".jsonl"))
+    .sort((a, b) => {
+      const mtimeA = statSync(resolve(traceDir, a)).mtimeMs;
+      const mtimeB = statSync(resolve(traceDir, b)).mtimeMs;
+      return mtimeA - mtimeB;
+    });
   if (traceFiles.length === 0) {
     console.error(chalk.red("❌ No trace files found in " + traceDir));
     process.exit(1);

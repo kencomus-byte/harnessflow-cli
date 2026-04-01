@@ -32,6 +32,14 @@ export type GuardrailDecision =
   | { action: "deny"; reason: string }
   | { action: "confirm"; reason: string };
 
+/**
+ * Sentinel value returned by promptUserConfirmation when the user chooses to quit.
+ * Callers should treat this as a denial and propagate via GuardrailAbortError rather
+ * than calling process.exit() directly, so sessions can finalize properly.
+ */
+export const USER_QUIT_SENTINEL = "USER_QUIT" as const;
+export type ConfirmationResult = boolean | typeof USER_QUIT_SENTINEL;
+
 export class GuardrailLayer {
   private compiledBlockedPatterns: RegExp[];
 
@@ -90,7 +98,13 @@ export class GuardrailLayer {
     return allowed.includes(toolName);
   }
 
-  async promptUserConfirmation(reason: string): Promise<boolean> {
+  /**
+   * Prompts the user for confirmation of a destructive action.
+   * Returns true (allow), false (deny), or USER_QUIT_SENTINEL (quit without process.exit).
+   * The caller is responsible for translating USER_QUIT_SENTINEL into a GuardrailAbortError
+   * so that session finalization runs normally.
+   */
+  async promptUserConfirmation(reason: string): Promise<ConfirmationResult> {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -104,8 +118,8 @@ export class GuardrailLayer {
         rl.close();
         const choice = answer.trim().toLowerCase();
         if (choice === "q" || choice === "quit") {
-          console.log("Session aborted by user.");
-          process.exit(0);
+          resolve(USER_QUIT_SENTINEL);
+          return;
         }
         resolve(choice === "a" || choice === "allow");
       });

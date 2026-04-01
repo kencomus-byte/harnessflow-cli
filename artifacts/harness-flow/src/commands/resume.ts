@@ -50,5 +50,9 @@ export async function resumeCommand(
   const adapter = await createAdapter(config);
   const runner = new SessionRunner(projectRoot, config);
 
-  await runner.resume(resolvedSessionId, adapter, options.verbose ?? false);
+  const session = await runner.resume(resolvedSessionId, adapter, options.verbose ?? false);
+
+  if (session.status === "FAILED" || session.status === "INTERRUPTED") {
+    process.exitCode = 1;
+  }
 }

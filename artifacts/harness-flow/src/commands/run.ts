@@ -35,7 +35,7 @@ export async function runCommand(
 
   const session = await runner.run(task, adapter, options.verbose ?? false);
 
-  if (session.status === "FAILED") {
+  if (session.status === "FAILED" || session.status === "INTERRUPTED") {
     process.exitCode = 1;
   }
 }
