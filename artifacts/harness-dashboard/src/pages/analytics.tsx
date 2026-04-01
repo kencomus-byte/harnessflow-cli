@@ -2,7 +2,6 @@ import { useGetTokenUsageTimeline, useGetToolUsageStats } from "@workspace/api-c
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { formatCost } from "@/lib/format";
 import { Wrench, TrendingUp } from "lucide-react";
 
 export default function Analytics() {
@@ -10,23 +9,23 @@ export default function Analytics() {
   const { data: tools, isLoading: loadingTools } = useGetToolUsageStats();
 
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-6 fade-in pb-8">
       <div>
-        <h1 className="text-3xl font-mono font-bold tracking-tight text-foreground">Analytics</h1>
-        <p className="text-muted-foreground mt-1 font-mono text-sm">Long-term telemetry and usage trends</p>
+        <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
+        <p className="text-muted-foreground mt-1 text-xs">Long-term telemetry and usage trends</p>
       </div>
 
-      <Card className="border-border/50 bg-card/30">
-        <CardHeader>
-          <CardTitle className="text-sm font-mono flex items-center text-muted-foreground uppercase tracking-wider">
-            <TrendingUp className="w-4 h-4 mr-2" />
+      <Card className="border-border/50 bg-[#161b22] rounded-sm shadow-none">
+        <CardHeader className="py-4">
+          <CardTitle className="text-xs flex items-center text-muted-foreground uppercase tracking-wider">
+            <TrendingUp className="w-4 h-4 mr-2 text-primary" />
             Token Expenditure (30d)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[350px] w-full mt-4">
+          <div className="h-[300px] w-full">
             {loadingTokens ? (
-              <Skeleton className="w-full h-full bg-muted/20" />
+              <Skeleton className="w-full h-full bg-muted/20 rounded-sm" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={tokens}>
@@ -60,7 +59,7 @@ export default function Analytics() {
                     tickFormatter={(val) => `$${val}`}
                   />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', fontFamily: 'monospace' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', fontFamily: 'monospace', fontSize: '12px' }}
                     itemStyle={{ color: 'hsl(var(--foreground))' }}
                     labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
                   />
@@ -89,17 +88,17 @@ export default function Analytics() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/50 bg-card/30">
-        <CardHeader>
-          <CardTitle className="text-sm font-mono flex items-center text-muted-foreground uppercase tracking-wider">
+      <Card className="border-border/50 bg-[#161b22] rounded-sm shadow-none">
+        <CardHeader className="py-4">
+          <CardTitle className="text-xs flex items-center text-muted-foreground uppercase tracking-wider">
             <Wrench className="w-4 h-4 mr-2" />
             Tool Utilization
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[350px] w-full mt-4">
+          <div className="h-[300px] w-full">
             {loadingTools ? (
-              <Skeleton className="w-full h-full bg-muted/20" />
+              <Skeleton className="w-full h-full bg-muted/20 rounded-sm" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tools} layout="vertical" margin={{ left: 100 }}>
@@ -113,7 +112,7 @@ export default function Analytics() {
                   />
                   <Tooltip 
                     cursor={{fill: 'hsl(var(--muted))', opacity: 0.4}}
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', fontFamily: 'monospace' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', fontFamily: 'monospace', fontSize: '12px' }}
                   />
                   <Bar dataKey="successCount" stackId="a" fill="hsl(var(--primary))" name="Success" />
                   <Bar dataKey="failCount" stackId="a" fill="hsl(var(--destructive))" name="Failed" />
