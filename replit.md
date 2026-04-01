@@ -91,6 +91,42 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/harness-flow` (`@workspace/harness-flow`)
+
+HarnessFlow CLI — a TypeScript harness layer sitting between users and AI coding agents (Claude CLI, Codex CLI).
+
+**Architecture**: `User → HarnessFlow CLI → Adapter → Claude CLI / Codex CLI`
+
+**Commands**:
+- `harness init [--backend claude|codex|dry-run]` — initialize project (creates `.harness.yaml`, `CLAUDE.md`, `.harness/`)
+- `harness run "<task>" [--dry-run] [--backend X] [--model Y] [--verbose]` — run an agent session
+- `harness resume [sessionId]` — resume last session or a specific session
+- `harness status [--tokens] [--traces] [--json]` — show session state, token usage, traces
+
+**Modules**:
+- `src/adapters/` — Claude CLI adapter (stream-json), Codex adapter, DryRun adapter (for testing)
+- `src/context/` — ContextManager: loads CLAUDE.md, session.json, feature_list.md, handoff.md
+- `src/prompt/` — PromptEngine: renders system prompt from templates, checks token budget
+- `src/guardrail/` — GuardrailLayer: blocks/confirms destructive patterns (rm -rf, DROP TABLE, etc.), injection detection
+- `src/hooks/` — HookRunner: pre_tool / post_tool / on_session_end hooks via shell scripts
+- `src/session/` — SessionRunner: orchestrates run flow, handles events, saves state
+- `src/telemetry/` — Tracer: JSONL trace files per session, token usage log
+- `src/config.ts` — loads/validates `.harness.yaml` with Zod
+- `src/types.ts` — all TypeScript interfaces (HarnessConfig, SessionState, AgentEvent, etc.)
+
+**Session State**: `.harness/session.json` — persisted after each session
+**Handoff Artifact**: `.harness/handoff.md` — written at end of session for context continuity
+**Traces**: `.harness/traces/<sessionId>.jsonl` — full event log per session
+**Token Log**: `.harness/token_usage.jsonl` — cumulative token usage across sessions
+
+**Testing**:
+- 31 unit tests (guardrail, config, context manager, dry-run adapter)
+- 38 E2E integration tests across 7 test groups
+- Run unit tests: `pnpm --filter @workspace/harness-flow run test`
+- Run E2E: `pnpm --filter @workspace/harness-flow run test:e2e`
+
+**Build**: `node build.mjs` → `dist/index.cjs` (esbuild CJS bundle)
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
