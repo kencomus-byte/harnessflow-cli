@@ -104,6 +104,32 @@ export class PromptEngine {
     return trimmed;
   }
 
+  /**
+   * Builds a prompt that asks the AI to write a handoff artifact summarizing the session.
+   * Injected at the end of a session so the AI can document what it did.
+   */
+  buildHandoffPrompt(task: string): string {
+    const template = readFileOrDefault(
+      resolve(this.templateDir, "handoff.md"),
+      DEFAULT_HANDOFF_TEMPLATE
+    );
+
+    return this.renderTemplate(template, { task });
+  }
+
+  /**
+   * Builds a verification prompt asking the AI to check its own work.
+   * Injected before session end to prompt self-review.
+   */
+  buildVerificationPrompt(task: string): string {
+    const template = readFileOrDefault(
+      resolve(this.templateDir, "verification.md"),
+      DEFAULT_VERIFICATION_TEMPLATE
+    );
+
+    return this.renderTemplate(template, { task });
+  }
+
   private renderTemplate(
     template: string,
     vars: Record<string, string>
@@ -115,3 +141,33 @@ export class PromptEngine {
     return result;
   }
 }
+
+const DEFAULT_HANDOFF_TEMPLATE = `## Handoff Request
+
+The current session is ending. Please write a handoff summary covering:
+
+### Task
+{{task}}
+
+### Please document:
+1. **What was accomplished** — specific files changed, features completed, tests added
+2. **What still needs to be done** — remaining TODO items, partial work
+3. **Blockers** — any issues that prevented completion
+4. **Critical files** — which files the next session should read first
+5. **Suggested next task** — what should the next agent session work on?
+
+Write this into the handoff.md file now.
+`;
+
+const DEFAULT_VERIFICATION_TEMPLATE = `## Self-Verification Checklist
+
+Before ending the session, verify the following for task: {{task}}
+
+1. **Tests pass**: Run \`pnpm test\` (or equivalent) and confirm all tests pass
+2. **Types check**: Run \`pnpm typecheck\` (or equivalent) and confirm 0 errors
+3. **Code quality**: Review your changes for obvious mistakes or oversights
+4. **Acceptance criteria**: Re-read the original task — did you address everything?
+5. **Edge cases**: Are there obvious edge cases you haven't handled?
+
+If any of the above fails, fix the issue before completing the session.
+`;

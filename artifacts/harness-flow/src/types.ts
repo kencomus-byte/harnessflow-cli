@@ -90,6 +90,26 @@ export const HarnessConfigSchema = z.object({
       auto_eval: z.boolean().default(true),
     })
     .default({}),
+
+  quality_gates: z
+    .array(
+      z.object({
+        name: z.string(),
+        command: z.string(),
+        timeout: z.number().default(60),
+        on: z.enum(["always", "session_end"]).default("session_end"),
+        blocking: z.boolean().default(false),
+        working_dir: z.string().optional(),
+      })
+    )
+    .default([]),
+
+  plugins: z
+    .object({
+      dir: z.string().default(".harness/plugins"),
+      enabled: z.boolean().default(true),
+    })
+    .default({}),
 });
 
 export type HarnessConfig = z.infer<typeof HarnessConfigSchema>;

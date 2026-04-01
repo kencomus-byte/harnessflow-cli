@@ -7,6 +7,8 @@ import { HookRunner } from "../hooks/runner.js";
 import { Tracer } from "../telemetry/tracer.js";
 import { AgentAdapter, GuardrailAbortError } from "../adapters/interface.js";
 import { USER_QUIT_SENTINEL } from "../guardrail/layer.js";
+import { QualityGateRunner } from "../quality/runner.js";
+import { PluginLoader } from "../plugins/loader.js";
 import { formatTokenCount, formatCost, formatTimestamp } from "../utils.js";
 import { basename } from "path";
 
@@ -15,6 +17,8 @@ export class SessionRunner {
   private promptEngine: PromptEngine;
   private guardrailLayer: GuardrailLayer;
   private hookRunner: HookRunner;
+  private qualityGateRunner: QualityGateRunner;
+  private pluginLoader: PluginLoader;
 
   constructor(
     private projectRoot: string,
@@ -24,6 +28,8 @@ export class SessionRunner {
     this.promptEngine = new PromptEngine(projectRoot, config);
     this.guardrailLayer = new GuardrailLayer(config);
     this.hookRunner = new HookRunner(projectRoot);
+    this.qualityGateRunner = new QualityGateRunner(projectRoot, config);
+    this.pluginLoader = new PluginLoader(projectRoot, config);
   }
 
   async run(task: string, adapter: AgentAdapter, verbose = false): Promise<SessionState> {
@@ -88,10 +94,14 @@ export class SessionRunner {
 
     console.log(chalk.gray(`\n🚀 Starting agent...\n`));
 
+    await this.pluginLoader.load();
+    await this.pluginLoader.emitEvent({ type: "session_start", task, backend: adapter.name });
+
     try {
       const lastToolRef: { name: string | undefined } = { name: undefined };
       for await (const event of adapter.run(agentRequest)) {
         await this.handleEvent(event, session, tracer, verbose, lastToolRef);
+        await this.pluginLoader.emitEvent({ ...event });
         if (event.type === "done") {
           session.tokenUsage = {
             inputTokens: event.usage.inputTokens,
@@ -108,6 +118,7 @@ export class SessionRunner {
       session.endedAt = formatTimestamp();
 
       await this.hookRunner.runHooks(this.config.hooks.on_session_end);
+      await this.runQualityGatesForSession(verbose);
 
     } catch (err) {
       if (err instanceof GuardrailAbortError) {
@@ -171,12 +182,28 @@ export class SessionRunner {
     return session;
   }
 
+  private async runQualityGatesForSession(verbose: boolean): Promise<void> {
+    if (this.config.quality_gates.length === 0) return;
+    const results = await this.qualityGateRunner.runGates("session_end", verbose);
+    if (this.qualityGateRunner.hasBlockingFailure(results)) {
+      console.warn(chalk.yellow("⚠️  Blocking quality gates failed (session marked COMPLETED, but review issues above)."));
+    }
+  }
+
   private async finalizeSession(session: SessionState, tracer: Tracer): Promise<void> {
     await this.contextManager.saveSession(session);
 
     if (this.config.session.auto_handoff && session.status !== "FAILED") {
       await this.contextManager.createHandoffArtifact(session);
     }
+
+    await this.pluginLoader.emitEvent({
+      type: "session_end",
+      status: session.status,
+      sessionId: session.sessionId,
+      totalTokens: session.tokenUsage.totalTokens,
+      filesChanged: session.progress.filesChanged.length,
+    });
 
     tracer.logSessionEnd(
       session.status,

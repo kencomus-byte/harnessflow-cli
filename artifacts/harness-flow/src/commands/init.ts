@@ -40,6 +40,7 @@ export async function initCommand(
   ensureDir(resolve(harnessDir, "traces"));
   ensureDir(resolve(harnessDir, "evals"));
   ensureDir(resolve(harnessDir, "prompts"));
+  ensureDir(resolve(harnessDir, "plugins"));
   console.log(chalk.green("  ✓ Created .harness/ directory structure"));
 
   const config = loadConfig(projectRoot);
@@ -62,8 +63,11 @@ export async function initCommand(
 
   console.log(chalk.cyan("\n✅ HarnessFlow initialized!\n"));
   console.log("Next steps:");
-  console.log(chalk.white("  1. Edit CLAUDE.md to describe your project"));
-  console.log(chalk.white("  2. Edit .harness/feature_list.md with your features"));
-  console.log(chalk.white("  3. Run: harness run \"your task here\""));
-  console.log(chalk.white("  4. Check traces in .harness/traces/\n"));
+  console.log(chalk.white("  1. Run: harness generate-claude  (auto-generate CLAUDE.md from config)"));
+  console.log(chalk.white("  2. Edit CLAUDE.md to describe your project"));
+  console.log(chalk.white("  3. Edit .harness/feature_list.md with your features"));
+  console.log(chalk.white("  4. Run: harness run \"your task here\""));
+  console.log(chalk.white("  5. Check traces:  harness status --traces"));
+  console.log(chalk.white("  6. Run gates:     harness check"));
+  console.log(chalk.white("  7. Add plugins:   harness plugin scaffold my-plugin\n"));
 }

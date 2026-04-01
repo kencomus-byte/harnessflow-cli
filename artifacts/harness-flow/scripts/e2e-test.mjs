@@ -275,6 +275,92 @@ async function runTests() {
     }
   }
 
+  // ============================================================
+  // TEST 9: generate-claude command
+  // ============================================================
+  console.log("\n📋 Test 9: generate-claude command");
+  {
+    const dir = makeTmpProject();
+    try {
+      run(["init", "--backend", "dry-run"], dir);
+
+      const { exitCode, stdout } = run(["generate-claude", "--force"], dir);
+      assert(exitCode === 0, "generate-claude exits 0");
+      assert(stdout.includes("Generated") || stdout.includes("generate"), "shows generation message");
+
+      const { existsSync: exists } = await import("fs");
+      assert(exists(`${dir}/CLAUDE.md`), "CLAUDE.md was created");
+
+      const content = readFileSync(`${dir}/CLAUDE.md`, "utf8");
+      assert(content.includes("HarnessFlow"), "CLAUDE.md references HarnessFlow");
+      assert(content.includes("dry-run"), "CLAUDE.md includes backend setting");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }
+
+  // ============================================================
+  // TEST 10: check command (no quality gates)
+  // ============================================================
+  console.log("\n📋 Test 10: check command with no quality gates");
+  {
+    const dir = makeTmpProject();
+    try {
+      run(["init", "--backend", "dry-run"], dir);
+
+      const { exitCode, stdout } = run(["check"], dir);
+      assert(exitCode === 0, "check exits 0 when no gates configured");
+      assert(stdout.includes("No quality gates"), "shows helpful message when no gates");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }
+
+  // ============================================================
+  // TEST 11: spawn command (single task, dry-run)
+  // ============================================================
+  console.log("\n📋 Test 11: spawn command");
+  {
+    const dir = makeTmpProject();
+    try {
+      run(["init", "--backend", "dry-run"], dir);
+
+      const { exitCode, stdout } = run(["spawn", "Write a README", "--backend", "dry-run"], dir);
+      assert(exitCode === 0, "spawn exits 0 on completed tasks");
+      assert(stdout.includes("Spawn"), "shows spawn results header");
+      assert(stdout.includes("COMPLETED"), "shows COMPLETED status");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }
+
+  // ============================================================
+  // TEST 12: plugin list and scaffold commands
+  // ============================================================
+  console.log("\n📋 Test 12: plugin commands");
+  {
+    const dir = makeTmpProject();
+    try {
+      run(["init", "--backend", "dry-run"], dir);
+
+      const { exitCode: e1, stdout: s1 } = run(["plugin", "list"], dir);
+      assert(e1 === 0, "plugin list exits 0");
+      assert(s1.includes("No plugins") || s1.includes("plugin"), "shows plugin status");
+
+      const { exitCode: e2, stdout: s2 } = run(["plugin", "scaffold", "my-test-plugin"], dir);
+      assert(e2 === 0, "plugin scaffold exits 0");
+      assert(s2.includes("scaffolded") || s2.includes("Plugin"), "shows scaffold message");
+
+      const { existsSync: exists2 } = await import("fs");
+      assert(exists2(`${dir}/.harness/plugins/my-test-plugin.mjs`), "plugin .mjs file created");
+
+      const pluginContent = readFileSync(`${dir}/.harness/plugins/my-test-plugin.mjs`, "utf8");
+      assert(pluginContent.includes("my-test-plugin"), "plugin file contains plugin name");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }
+
   // Summary
   console.log(`\n${"=".repeat(50)}`);
   console.log(`Results: ${passed} passed, ${failed} failed`);

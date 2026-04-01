@@ -7,8 +7,12 @@ import { resumeCommand } from "./commands/resume.js";
 import { statusCommand } from "./commands/status.js";
 import { evalCommand } from "./commands/eval.js";
 import { replayCommand } from "./commands/replay.js";
+import { generateClaudeCommand } from "./commands/generate-claude.js";
+import { checkCommand } from "./commands/check.js";
+import { spawnCommand } from "./commands/spawn.js";
+import { pluginListCommand, pluginScaffoldCommand } from "./commands/plugin.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -110,6 +114,70 @@ async function main(): Promise<void> {
         await evalCommand(projectRoot, { sessionId, ...options });
       }
     );
+
+  program
+    .command("generate-claude")
+    .description("Generate or update CLAUDE.md from .harness.yaml config")
+    .option("--force", "Overwrite existing CLAUDE.md")
+    .option("--project-name <name>", "Override the project name in the generated file")
+    .option("--output <path>", "Output path (default: CLAUDE.md from config)")
+    .action(
+      async (options: { force?: boolean; projectName?: string; output?: string }) => {
+        const projectRoot = findProjectRoot();
+        await generateClaudeCommand(projectRoot, options);
+      }
+    );
+
+  program
+    .command("check")
+    .description("Run quality gates defined in .harness.yaml")
+    .option("--verbose", "Show full output of each gate")
+    .option("--json", "Output results as JSON")
+    .option("--gate <name>", "Only run gates matching this name or command substring")
+    .action(
+      async (options: { verbose?: boolean; json?: boolean; gate?: string }) => {
+        const projectRoot = findProjectRoot();
+        await checkCommand(projectRoot, options);
+      }
+    );
+
+  program
+    .command("spawn <tasks...>")
+    .description("Spawn multiple agent sessions for different tasks")
+    .option("--parallel", "Run all tasks in parallel (default: sequential)")
+    .option("--backend <backend>", "AI backend to use for all tasks")
+    .option("--verbose", "Show agent output for each task")
+    .option("--json", "Output results as JSON")
+    .action(
+      async (
+        tasks: string[],
+        options: { parallel?: boolean; backend?: string; verbose?: boolean; json?: boolean }
+      ) => {
+        const projectRoot = findProjectRoot();
+        await spawnCommand(tasks, projectRoot, options);
+      }
+    );
+
+  const pluginCmd = program
+    .command("plugin")
+    .description("Manage HarnessFlow plugins");
+
+  pluginCmd
+    .command("list")
+    .description("List installed plugins in .harness/plugins/")
+    .option("--json", "Output as JSON")
+    .action(async (options: { json?: boolean }) => {
+      const projectRoot = findProjectRoot();
+      await pluginListCommand(projectRoot, options);
+    });
+
+  pluginCmd
+    .command("scaffold <name>")
+    .description("Create a starter plugin file in .harness/plugins/")
+    .action(async (name: string) => {
+      const projectRoot = findProjectRoot();
+      await pluginScaffoldCommand(name, projectRoot);
+    });
 
   program.on("command:*", () => {
     console.error(chalk.red(`Unknown command: ${program.args.join(" ")}`));

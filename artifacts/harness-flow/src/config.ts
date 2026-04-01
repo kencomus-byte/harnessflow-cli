@@ -74,5 +74,23 @@ observability:
   eval_dir: .harness/evals
   token_log: .harness/token_usage.jsonl
   auto_eval: true
+
+# Quality gates — run checks at session end or always
+# quality_gates:
+#   - name: Unit tests
+#     command: pnpm test
+#     on: session_end
+#     blocking: false
+#     timeout: 120
+#   - name: Typecheck
+#     command: pnpm typecheck
+#     on: always
+#     blocking: true
+#     timeout: 60
+
+# Plugin system — add .mjs plugins to .harness/plugins/
+plugins:
+  dir: .harness/plugins
+  enabled: true
 `;
 }
