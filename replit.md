@@ -92,6 +92,55 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/harness-dashboard` (`@workspace/harness-dashboard`)
+
+HarnessFlow IDE-style web dashboard — React + Vite + Tailwind. VS Code/Cursor-style IDE layout.
+
+**Layout zones**:
+- Activity Bar (48px left): Dashboard, Sessions, Analytics, Config, New Session (+)
+- Primary Sidebar (240px): File-tree session explorer grouped by status (RUNNING/COMPLETED/FAILED/INTERRUPTED). Stop button on RUNNING sessions. Poll interval: 3s.
+- Tab Bar: closeable tabs (dashboard.hf, sessions.hf, analytics.hf, harness.yaml, sess_*.hf)
+- Editor Area: tab-based navigation, no URL routing
+- Bottom Panel: TERMINAL | TRACE | OUTPUT tabs. Terminal has full command input with SSE streaming
+- Status Bar (24px): ONLINE | Terminal | + New Session | HarnessFlow | tokens | cost | success%
+
+**Real functionality** (not just monitoring):
+- **New Session dialog** (`components/new-session-dialog.tsx`): backend selector (dry-run/claude/codex), model, task textarea → `POST /api/sessions/start` → spawns harness CLI child process → live SSE output streams to terminal tab
+- **Stop session**: ■ button on RUNNING sessions in sidebar → `PATCH /api/sessions/:id/stop` → SIGTERM
+- **Config editor**: `pages/config.tsx` — editable JSON textarea with JSON validation, save/reset buttons → `PUT /api/config`
+- **Integrated terminal**: `BottomPanel` terminal tab — command history (↑↓), SSE streaming from `POST /api/terminal/exec` + `GET /api/terminal/events/:execId`
+
+**Port**: 18360 (env: `PORT`), preview path: `/harness-dashboard/`
+
+### `artifacts/api-server` (`@workspace/api-server`) — Backend
+
+Express 5 API server for HarnessFlow Dashboard.
+
+**Architecture**: Mutable in-memory session store (`src/lib/session-store.ts`) + Process Manager (`src/lib/process-manager.ts`) that tracks spawned harness CLI processes and SSE listeners.
+
+**Endpoints**:
+- `GET /api/sessions` — list sessions (from mutable store, auto-updated when processes finish)
+- `GET /api/sessions/:id` — get session detail
+- `GET /api/sessions/:id/trace` — get trace events
+- `GET /api/sessions/:id/eval` — get eval report
+- `POST /api/sessions/start` — spawn `node artifacts/harness-flow/dist/index.cjs run <task> --backend <backend>` as child process; adds session to mutable store; polls until done and updates status
+- `PATCH /api/sessions/:id/stop` — SIGTERM the running process; updates status to INTERRUPTED
+- `GET /api/sessions/:id/exec-id` — get active execId for SSE streaming
+- `POST /api/terminal/exec` — run any harness subcommand (run/status/check/eval/etc); returns execId
+- `GET /api/terminal/events/:execId` — SSE stream of stdout/stderr from a running execution
+- `GET /api/config` — get harness config (from mutable in-memory store)
+- `PUT /api/config` — update harness config (in-memory)
+- `GET /api/analytics/*` — summary, tokens timeline, tools stats, activity feed (computed from live session store)
+- `GET /api/healthz` — health check
+
+**Process Manager**:
+- `startHarnessCommand(args, sessionId?)` → execId: spawns harness CLI, strips ANSI, broadcasts lines to SSE listeners
+- `subscribeToExecution(execId, res)`: replays buffered output + streams new output via SSE
+- `killProcess(sessionId)`: sends SIGTERM
+- CLI path: `path.resolve(process.cwd(), '../../artifacts/harness-flow/dist/index.cjs')` (from `artifacts/api-server/` CWD)
+
+**Port**: 8080 (env: `PORT`), routes mounted at `/api`
+
 ### `artifacts/harness-flow` (`@workspace/harness-flow`)
 
 HarnessFlow CLI — a TypeScript harness layer sitting between users and AI coding agents (Claude CLI, Codex CLI).

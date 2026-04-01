@@ -1,0 +1,5 @@
+{"ts":"2026-04-01T09:07:10.817Z","type":"session_start","sessionId":"session-20260401090710","task":"Write unit tests for the payment module","backend":"dry-run"}
+{"ts":"2026-04-01T09:07:10.818Z","type":"context_load","files":["CLAUDE.md",".harness/feature_list.md"],"tokens":196}
+{"ts":"2026-04-01T09:07:10.920Z","type":"tool_call","tool":"Read","args":{"file":"CLAUDE.md"},"success":true,"latencyMs":0}
+{"ts":"2026-04-01T09:07:11.071Z","type":"token_usage","inputTokens":327,"outputTokens":50,"totalTokens":377}
+{"ts":"2026-04-01T09:07:11.072Z","type":"session_end","status":"COMPLETED","totalTokens":377,"filesChanged":0}

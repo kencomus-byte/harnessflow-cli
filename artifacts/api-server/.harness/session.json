@@ -1,0 +1,24 @@
+{
+  "sessionId": "session-20260401090710",
+  "startedAt": "2026-04-01T09:07:10.817Z",
+  "backend": "dry-run",
+  "task": "Write unit tests for the payment module",
+  "status": "COMPLETED",
+  "progress": {
+    "filesChanged": [],
+    "testsAdded": 0,
+    "testsPassing": 0,
+    "testsFailing": 0
+  },
+  "tokenUsage": {
+    "inputTokens": 327,
+    "outputTokens": 50,
+    "totalTokens": 377,
+    "estimatedCost": 0.005655
+  },
+  "nextSession": {
+    "blockers": [],
+    "criticalFiles": []
+  },
+  "endedAt": "2026-04-01T09:07:11.071Z"
+}

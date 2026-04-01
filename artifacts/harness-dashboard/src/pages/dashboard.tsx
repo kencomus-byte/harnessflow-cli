@@ -141,9 +141,9 @@ function StatCard({ title, value, icon: Icon, subtitle, highlight = false }: any
           {value ?? <Skeleton className="h-7 w-24 bg-muted/20 rounded-sm" />}
         </div>
         {(subtitle || !value) && (
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <div className="text-[10px] text-muted-foreground mt-1">
             {value ? subtitle : <Skeleton className="h-3 w-16 bg-muted/20 rounded-sm" />}
-          </p>
+          </div>
         )}
       </CardContent>
     </Card>
