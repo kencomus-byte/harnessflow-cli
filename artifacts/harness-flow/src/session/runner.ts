@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { HarnessConfig, SessionState, AgentEvent } from "../types.js";
+import { HarnessConfig, SessionState, AgentEvent, HookContext } from "../types.js";
 import { ContextManager } from "../context/manager.js";
 import { PromptEngine } from "../prompt/engine.js";
 import { GuardrailLayer } from "../guardrail/layer.js";
@@ -83,6 +83,31 @@ export class SessionRunner {
       }
     }
 
+    const baseCtx: HookContext = {
+      session_id: session.sessionId,
+      cwd: this.projectRoot,
+      hook_event: "session_start",
+      task,
+      backend: adapter.name,
+    };
+
+    await this.pluginLoader.load();
+    await this.pluginLoader.emitEvent({ type: "session_start", task, backend: adapter.name });
+
+    if (this.config.hooks.on_session_start.length > 0) {
+      if (verbose) console.log(chalk.gray("🪝 Running on_session_start hooks..."));
+      await this.hookRunner.runTypedHooks(this.config.hooks.on_session_start, baseCtx);
+    }
+
+    if (this.config.hooks.on_user_prompt.length > 0) {
+      if (verbose) console.log(chalk.gray("🪝 Running on_user_prompt hooks..."));
+      await this.hookRunner.runTypedHooks(
+        this.config.hooks.on_user_prompt,
+        { ...baseCtx, hook_event: "user_prompt_submit" },
+        undefined
+      );
+    }
+
     const agentRequest = {
       task: taskPrompt,
       systemPrompt,
@@ -94,13 +119,10 @@ export class SessionRunner {
 
     console.log(chalk.gray(`\n🚀 Starting agent...\n`));
 
-    await this.pluginLoader.load();
-    await this.pluginLoader.emitEvent({ type: "session_start", task, backend: adapter.name });
-
     try {
       const lastToolRef: { name: string | undefined } = { name: undefined };
       for await (const event of adapter.run(agentRequest)) {
-        await this.handleEvent(event, session, tracer, verbose, lastToolRef);
+        await this.handleEvent(event, session, tracer, verbose, lastToolRef, baseCtx);
         await this.pluginLoader.emitEvent({ ...event });
         if (event.type === "done") {
           session.tokenUsage = {
@@ -117,7 +139,22 @@ export class SessionRunner {
       session.status = "COMPLETED";
       session.endedAt = formatTimestamp();
 
-      await this.hookRunner.runHooks(this.config.hooks.on_session_end);
+      if (this.config.hooks.on_stop.length > 0) {
+        if (verbose) console.log(chalk.gray("🪝 Running on_stop hooks..."));
+        const stopCtx: HookContext = { ...baseCtx, hook_event: "stop" };
+        const { shouldContinue } = await this.hookRunner.runStopHooks(
+          this.config.hooks.on_stop,
+          stopCtx
+        );
+        if (shouldContinue) {
+          console.log(chalk.yellow("⏩ on_stop hook requested continuation (exit 2)."));
+        }
+      }
+
+      await this.hookRunner.runTypedHooks(
+        this.config.hooks.on_session_end,
+        { ...baseCtx, hook_event: "session_end" }
+      );
       await this.runQualityGatesForSession(verbose);
 
     } catch (err) {
@@ -150,8 +187,15 @@ export class SessionRunner {
 
     try {
       const lastToolRef: { name: string | undefined } = { name: undefined };
+      const baseCtx: HookContext = {
+        session_id: sessionId,
+        cwd: this.projectRoot,
+        hook_event: "session_start",
+        task,
+        backend: adapter.name,
+      };
       for await (const event of adapter.resume(sessionId, task)) {
-        await this.handleEvent(event, session, tracer, verbose, lastToolRef);
+        await this.handleEvent(event, session, tracer, verbose, lastToolRef, baseCtx);
         if (event.type === "done") {
           session.tokenUsage = {
             inputTokens: event.usage.inputTokens,
@@ -219,7 +263,8 @@ export class SessionRunner {
     session: SessionState,
     tracer: Tracer,
     verbose: boolean,
-    lastToolRef: { name: string | undefined }
+    lastToolRef: { name: string | undefined },
+    baseCtx: HookContext
   ): Promise<void> {
     switch (event.type) {
       case "thinking":
@@ -261,11 +306,29 @@ export class SessionRunner {
           }
         }
 
+        const toolCtx: HookContext = {
+          ...baseCtx,
+          hook_event: "pre_tool_use",
+          tool_name: event.tool,
+          tool_args: event.args,
+        };
+
         const argsStr = JSON.stringify(event.args).slice(0, 120);
         console.log(chalk.blue(`🔧 ${event.tool}`) + chalk.gray(` ${argsStr}`));
 
         lastToolRef.name = event.tool;
-        await this.hookRunner.runHooks(this.config.hooks.pre_tool, event.tool);
+
+        const { modifiedArgs } = await this.hookRunner.runPreToolHooks(
+          this.config.hooks.pre_tool,
+          toolCtx
+        );
+        if (modifiedArgs) {
+          Object.assign(event.args, modifiedArgs);
+          if (verbose) {
+            console.log(chalk.gray(`   🔄 Tool args modified by hook: ${JSON.stringify(modifiedArgs).slice(0, 120)}`));
+          }
+        }
+
         tracer.logToolCall(event.tool, event.args, true, 0);
 
         if (event.tool === "Write" || event.tool === "Edit") {
@@ -284,17 +347,32 @@ export class SessionRunner {
         if (verbose) {
           console.log(chalk.gray(`   → ${event.result.slice(0, 200)}`));
         }
-        await this.hookRunner.runHooks(this.config.hooks.post_tool, lastToolRef.name);
+        await this.hookRunner.runTypedHooks(
+          this.config.hooks.post_tool,
+          { ...baseCtx, hook_event: "post_tool_use", tool_name: lastToolRef.name },
+          lastToolRef.name
+        );
         lastToolRef.name = undefined;
+        break;
+
+      case "error":
+        console.error(chalk.red(`❌ ${event.error}`));
+        if (this.config.hooks.post_tool_failure.length > 0) {
+          await this.hookRunner.runTypedHooks(
+            this.config.hooks.post_tool_failure,
+            {
+              ...baseCtx,
+              hook_event: "post_tool_use_failure",
+              tool_name: lastToolRef.name,
+              tool_result: event.error,
+            }
+          );
+        }
         break;
 
       case "message":
         process.stdout.write(event.content);
         if (!event.content.endsWith("\n")) process.stdout.write("\n");
-        break;
-
-      case "error":
-        console.error(chalk.red(`❌ ${event.error}`));
         break;
 
       case "done":

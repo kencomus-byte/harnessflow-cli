@@ -1,5 +1,29 @@
 import { z } from "zod";
 
+const AnyHookSchema = z.object({
+  name: z.string().optional(),
+  handler: z.enum(["script", "prompt", "agent"]).default("script"),
+  script: z.string().optional(),
+  modify_input: z.boolean().default(false),
+  evaluation_prompt: z.string().optional(),
+  model: z.string().optional(),
+  agent_task: z.string().optional(),
+  allowed_tools: z.array(z.string()).default(["Read", "Grep", "Glob"]),
+  on_tools: z.array(z.string()).optional(),
+  blocking: z.boolean().default(true),
+  timeout: z.number().default(30),
+});
+
+const SessionHookSchema = z.object({
+  name: z.string().optional(),
+  handler: z.enum(["script", "prompt", "agent"]).default("script"),
+  script: z.string().optional(),
+  evaluation_prompt: z.string().optional(),
+  agent_task: z.string().optional(),
+  blocking: z.boolean().default(false),
+  timeout: z.number().default(60),
+});
+
 export const HarnessConfigSchema = z.object({
   backend: z.enum(["claude", "codex", "dry-run"]).default("claude"),
   model: z.string().optional(),
@@ -38,38 +62,13 @@ export const HarnessConfigSchema = z.object({
 
   hooks: z
     .object({
-      pre_tool: z
-        .array(
-          z.object({
-            name: z.string().optional(),
-            script: z.string(),
-            on_tools: z.array(z.string()).optional(),
-            blocking: z.boolean().default(true),
-            timeout: z.number().default(30),
-          })
-        )
-        .default([]),
-      post_tool: z
-        .array(
-          z.object({
-            name: z.string().optional(),
-            script: z.string(),
-            on_tools: z.array(z.string()).optional(),
-            blocking: z.boolean().default(false),
-            timeout: z.number().default(60),
-          })
-        )
-        .default([]),
-      on_session_end: z
-        .array(
-          z.object({
-            name: z.string().optional(),
-            script: z.string(),
-            blocking: z.boolean().default(false),
-            timeout: z.number().default(60),
-          })
-        )
-        .default([]),
+      on_session_start: z.array(SessionHookSchema).default([]),
+      on_user_prompt: z.array(AnyHookSchema).default([]),
+      pre_tool: z.array(AnyHookSchema).default([]),
+      post_tool: z.array(AnyHookSchema).default([]),
+      post_tool_failure: z.array(SessionHookSchema).default([]),
+      on_stop: z.array(SessionHookSchema).default([]),
+      on_session_end: z.array(SessionHookSchema).default([]),
     })
     .default({}),
 
@@ -113,6 +112,8 @@ export const HarnessConfigSchema = z.object({
 });
 
 export type HarnessConfig = z.infer<typeof HarnessConfigSchema>;
+export type HookDef = z.infer<typeof AnyHookSchema>;
+export type SessionHookDef = z.infer<typeof SessionHookSchema>;
 
 export const SessionStateSchema = z.object({
   sessionId: z.string(),
@@ -195,6 +196,19 @@ export interface HookResult {
   stderr: string;
   durationMs: number;
   passed: boolean;
+  modifiedArgs?: Record<string, unknown>;
+  forceContinue?: boolean;
+}
+
+export interface HookContext {
+  session_id: string;
+  cwd: string;
+  hook_event: string;
+  tool_name?: string;
+  tool_args?: Record<string, unknown>;
+  tool_result?: string;
+  task?: string;
+  backend?: string;
 }
 
 export type TraceEvent = {
